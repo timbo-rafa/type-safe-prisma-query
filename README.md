@@ -1,73 +1,40 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# Problem Statement
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+ORMs often struggle to enforce type-safety to queries with partial data and joins.
+This repository contains a small code sample on how to achieve that with Prisma ORM.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+On our [repository example](/src/posts/broken-post.repository.ts),
+we try to select only the email field from the user table, along only with their posts' title. Prisma currently does not allow us to do that and errors out:
 
-## Description
+<img src="/screenshots/prisma-query-error.png">
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Similarly, if we try Prisma validators as suggested on the post [Operating against partial structures](https://www.prisma.io/docs/orm/prisma-client/type-safety/operating-against-partial-structures-of-model-types), prisma seems to join with the User table twice, one correctly hiding the "name" field, but the second joins the complete table incorrectly:
 
-## Installation
+<img src="/screenshots/prisma-wrong-join.png">
 
-```bash
-$ yarn install
-```
+# Solution
 
-## Running the app
+In order to solve these problematic joins, we can generate one type per table and merge them in Typescript, as shown in [post.entities.ts](/src/posts/post.entities.ts).
+
+Since we will do that multiple times across different features, we can extract this type logic into a generic for reusability as is in [posts-using-generics.entities.ts](/src/posts/post-using-generics.entities.ts)
+
+It's correctness can be seen by type errors as below:
+
+<img src="/screenshots/prisma-partial-types.png">
+
+We can then use this type on query results returned by prisma.
+However, since the typed query does not allow `select` and `include`, we may need to resort to [prisma.$queryRaw](https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/raw-queries#queryraw),
+in which case the raw sql will **not** be type-safe. You may want to consider tools like [SafeQL](https://safeql.dev/compatibility/prisma.html),
+or migrating to Prisma 5.19.0+, so you can use Prisma's [TypedSQL](https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/typedsql)
+(in preview at time of writing)
+
+# Try it yourself
+
+After cloning repository:
 
 ```bash
-# development
-$ yarn run start
-
-# watch mode
-$ yarn run start:dev
-
-# production mode
-$ yarn run start:prod
+npm install
+prisma generate
 ```
 
-## Test
-
-```bash
-# unit tests
-$ yarn run test
-
-# e2e tests
-$ yarn run test:e2e
-
-# test coverage
-$ yarn run test:cov
-```
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](LICENSE).
+Then go to [posts-using-generics.entities.ts](/src/posts/post-using-generics.entities.ts) to see the type errors in your editor
